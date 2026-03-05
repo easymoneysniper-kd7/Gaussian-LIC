@@ -22,3 +22,7 @@ ckpt/
 *.engine
 
 third_party/
+
+*.bag
+*.bag:Zone.Identifier
+datasets/

@@ -213,7 +213,10 @@ void GaussianModel::initialize(const std::shared_ptr<Dataset>& dataset)
 {
     /// foreground
     int num = static_cast<int>(dataset->pointcloud_.size());
-    assert(num > 0);
+    if (num <= 0)
+    {
+        return;
+    }
     torch::Tensor fused_point_cloud = torch::zeros({num, 3}, torch::kFloat32).cuda();  // (n, 3)
     int deg_2 = (sh_degree_ + 1) * (sh_degree_ + 1);
     torch::Tensor features = torch::zeros({num, 3, deg_2}, torch::kFloat32).cuda();  // (n, 3, 16)
@@ -726,7 +729,6 @@ void evaluateVisualQuality(const std::shared_ptr<Dataset>& dataset,
     std::cout << "\n     🎉 Evaluate Visual Quality 🎉\n";
     std::cout << "\n        [Number of Final Gaussians] " << pc->getXYZ().size(0) << std::endl;
 
-    if (fs::exists(result_path)) fs::remove_all(result_path);
     fs::create_directories(result_path);
 
     std::string render_dir_path = result_path + "/render";
@@ -748,6 +750,9 @@ void evaluateVisualQuality(const std::shared_ptr<Dataset>& dataset,
         std::cerr << "lpips model loading failed: " << e.what() << std::endl;
     }
 
+    double train_psnr = 0;
+    double train_ssim = 0;
+    double train_lpips = 0;
     {
         double psnrs = 0;
         double ssims = 0;
@@ -784,10 +789,17 @@ void evaluateVisualQuality(const std::shared_ptr<Dataset>& dataset,
         psnrs /= dataset->train_cameras_.size();
         ssims /= dataset->train_cameras_.size();
         lpipss /= dataset->train_cameras_.size();
+        train_psnr = psnrs;
+        train_ssim = ssims;
+        train_lpips = lpipss;
         std::cout << std::fixed << std::setprecision(2) << "        [Training View PSNR] " << psnrs << std::endl;
         std::cout << std::fixed << std::setprecision(3) << "        [Training View SSIM] " << ssims << std::endl;
         std::cout << std::fixed << std::setprecision(3) << "        [Training View LPIPS] " << lpipss << std::endl;
     }
+
+    double test_psnr = 0;
+    double test_ssim = 0;
+    double test_lpips = 0;
     {
         double psnrs = 0;
         double ssims = 0;
@@ -824,8 +836,23 @@ void evaluateVisualQuality(const std::shared_ptr<Dataset>& dataset,
         psnrs /= dataset->test_cameras_.size();
         ssims /= dataset->test_cameras_.size();
         lpipss /= dataset->test_cameras_.size();
+        test_psnr = psnrs;
+        test_ssim = ssims;
+        test_lpips = lpipss;
         std::cout << std::fixed << std::setprecision(2) << "        [In-Sequence Novel View PSNR] " << psnrs << std::endl;
         std::cout << std::fixed << std::setprecision(3) << "        [In-Sequence Novel View SSIM] " << ssims << std::endl;
         std::cout << std::fixed << std::setprecision(3) << "        [In-Sequence Novel View LPIPS] " << lpipss << std::endl;
     }
+
+    std::ofstream metrics_file(result_path + "/metrics.txt", std::ios::out | std::ios::trunc);
+    metrics_file << std::fixed;
+    metrics_file << "num_final_gaussians=" << pc->getXYZ().size(0) << "\n";
+    metrics_file << std::setprecision(6);
+    metrics_file << "train_psnr=" << train_psnr << "\n";
+    metrics_file << "train_ssim=" << train_ssim << "\n";
+    metrics_file << "train_lpips=" << train_lpips << "\n";
+    metrics_file << "test_psnr=" << test_psnr << "\n";
+    metrics_file << "test_ssim=" << test_ssim << "\n";
+    metrics_file << "test_lpips=" << test_lpips << "\n";
+    metrics_file.close();
 }

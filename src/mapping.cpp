@@ -24,9 +24,14 @@
 #include <condition_variable>
 #include <atomic>
 #include <chrono>
+#include <filesystem>
+#include <ctime>
+#include <sstream>
 #include <termios.h>
 #include <unistd.h>
 #include <fcntl.h>
+
+namespace fs = std::filesystem;
 
 std::mutex m_buf;
 std::condition_variable con;
@@ -38,6 +43,57 @@ std::queue<sensor_msgs::ImageConstPtr> image_buf;
 std::atomic<bool> exit_flag(false);
 std::atomic<double> last_point_time(0.0);
 std::atomic<bool> gaussians_initialized(false);
+
+std::string sanitizeDatasetName(const std::string& raw_name)
+{
+    std::string cleaned;
+    cleaned.reserve(raw_name.size());
+    for (const char c : raw_name)
+    {
+        if ((c >= 'a' && c <= 'z') ||
+            (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') ||
+            c == '_' || c == '-')
+        {
+            cleaned.push_back(c);
+        }
+        else
+        {
+            cleaned.push_back('_');
+        }
+    }
+    while (!cleaned.empty() && cleaned.front() == '_') cleaned.erase(cleaned.begin());
+    while (!cleaned.empty() && cleaned.back() == '_') cleaned.pop_back();
+    if (cleaned.empty()) cleaned = "dataset";
+    return cleaned;
+}
+
+std::string currentDateString()
+{
+    const std::time_t now = std::time(nullptr);
+    std::tm local_tm{};
+    localtime_r(&now, &local_tm);
+    char buf[16];
+    std::strftime(buf, sizeof(buf), "%Y%m%d", &local_tm);
+    return std::string(buf);
+}
+
+std::string makeRunResultPath(const std::string& result_root, const std::string& dataset_name)
+{
+    fs::path root_path(result_root);
+    fs::create_directories(root_path);
+
+    const std::string base_name = sanitizeDatasetName(dataset_name) + "_" + currentDateString();
+    fs::path run_path = root_path / base_name;
+    int suffix = 1;
+    while (fs::exists(run_path))
+    {
+        run_path = root_path / (base_name + "_" + std::to_string(suffix));
+        ++suffix;
+    }
+    fs::create_directories(run_path);
+    return run_path.string();
+}
 
 void pointCallback(const sensor_msgs::PointCloud2ConstPtr& point_msg) 
 {
@@ -158,10 +214,15 @@ void mapping(const YAML::Node& node, const std::string& result_path, const std::
         if (!gaussians->is_init_)
         {
             /// [3] initialize map
-            gaussians->is_init_ = true;
-            gaussians_initialized = true;
+            if (dataset->pointcloud_.empty())
+            {
+                std::cout << "\033[1;31m     Skip Init: empty pointcloud in current keyframe.\033[0m" << std::endl;
+                continue;
+            }
             gaussians->initialize(dataset);
             gaussians->trainingSetup();
+            gaussians->is_init_ = true;
+            gaussians_initialized = true;
         }
         else 
         {
@@ -217,10 +278,18 @@ int main(int argc, char** argv)
     YAML::Node config_node = YAML::LoadFile(config_path);
     std::string result_path;
     nh.param<std::string>("result_path", result_path, "");
+    std::string dataset_name;
+    nh.param<std::string>("dataset_name", dataset_name, "dataset");
+    dataset_name = fs::path(dataset_name).stem().string();
+    if (dataset_name.empty()) dataset_name = "dataset";
+
+    std::string run_result_path = makeRunResultPath(result_path, dataset_name);
+    std::cout << "\n\n📁 Result path: " << run_result_path << "\n\n";
+
     std::string lpips_path;
     nh.param<std::string>("lpips_path", lpips_path, "");
 
-    std::thread mapping_process(mapping, config_node, result_path, lpips_path);
+    std::thread mapping_process(mapping, config_node, run_result_path, lpips_path);
     std::thread monitor_thread([](){
         while (!exit_flag) 
         {

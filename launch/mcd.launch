@@ -1,10 +1,12 @@
 <?xml version="1.0"?>
 <launch>
   <arg name="config_path"       default = "config/mcd.yaml" />
+  <arg name="dataset_name"      default = "mcd" />
 
   <node pkg="gaussian_lic" type="gs_mapping" name="$(anon gs_mapping)" output="screen">
     <param name="config_path"     type="string" value="$(find gaussian_lic)/$(arg config_path)" />
     <param name="result_path"     type="string" value="$(find gaussian_lic)/result" />
+    <param name="dataset_name"    type="string" value="$(arg dataset_name)" />
     <param name="lpips_path"     type="string" value="$(find gaussian_lic)/src/lpips" />
   </node>
 

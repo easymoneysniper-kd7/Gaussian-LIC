@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(gaussian_lic)
+project(gaussian_lic LANGUAGES CXX CUDA)
 
 SET(CMAKE_BUILD_TYPE "Release")
 # SET(CMAKE_CXX_FLAGS_RELEASE "$ENV{CXXFLAGS} -O3")
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g -Wno-sign-compare -Wno-unused -Wno-comment -pthread")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -msse4.2")
 
@@ -28,10 +30,9 @@ find_package(OpenCV 4 REQUIRED)
 set(Torch_DIR ~/Software/libtorch/share/cmake/Torch)
 find_package(Torch REQUIRED)
 
-set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-11.7")
+set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda")
 set(CUDA_INCLUDE_DIRS "${CUDA_TOOLKIT_ROOT_DIR}/include")
 set(CUDA_LIB_DIR "${CUDA_TOOLKIT_ROOT_DIR}/lib64")
-find_package(CUDA REQUIRED)
 find_library(FFI_LIB ffi)
 
 find_package(PkgConfig REQUIRED)
@@ -60,7 +61,7 @@ add_executable(gs_mapping
               ${PROJECT_SOURCE_DIR}/src/mapping.cpp 
               ${PROJECT_SOURCE_DIR}/src/gaussian.cpp
               ${PROJECT_SOURCE_DIR}/src/tinyply.cpp
-              ${PROJECT_SOURCE_DIR}/src/simple-knn/spatial.cu
+              ${PROJECT_SOURCE_DIR}/src/simple-knn/spatial.cpp
               ${PROJECT_SOURCE_DIR}/src/simple-knn/simple_knn.cu
               ${PROJECT_SOURCE_DIR}/src/fused-ssim/ssim.cu
               ${PROJECT_SOURCE_DIR}/src/rasterizer/renderer.cpp

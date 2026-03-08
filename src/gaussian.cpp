@@ -640,12 +640,68 @@ void extend(const std::shared_ptr<Dataset>& dataset, std::shared_ptr<GaussianMod
     dataset->pointdepth_.clear();
 }
 
+/// Runs `passes` optimization rounds focused exclusively on the latter half
+/// of training cameras, to compensate for training starvation in late frames.
+void optimizeLateFrames(const std::shared_ptr<Dataset>& dataset,
+                        std::shared_ptr<GaussianModel>& pc,
+                        int passes)
+{
+    int n = static_cast<int>(dataset->train_cameras_.size());
+    if (n == 0) return;
+
+    torch::Tensor bg;
+    if (pc->white_background_) bg = torch::ones({3}, torch::kFloat32).cuda();
+    else bg = torch::zeros({3}, torch::kFloat32).cuda();
+
+    // Focus on the latter two-thirds of training cameras
+    int start = n / 3;
+    std::vector<int> late_idx(n - start);
+    std::iota(late_idx.begin(), late_idx.end(), start);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    for (int pass = 0; pass < passes; ++pass)
+    {
+        std::shuffle(late_idx.begin(), late_idx.end(), gen);
+        // Cap per-pass iterations to keep runtime bounded
+        int limit = std::min((int)late_idx.size(), 200);
+        for (int k = 0; k < limit; ++k)
+        {
+            int idx = late_idx[k];
+            const auto& cam = dataset->train_cameras_[idx];
+            auto gt_image = cam->original_image_.to(torch::kCUDA, /*non_blocking=*/true);
+            auto render_pkg = render(cam, pc, bg, pc->apply_exposure_);
+            auto rendered_image = std::get<0>(render_pkg);
+            auto Ll1 = loss_utils::l1_loss(rendered_image, gt_image);
+            auto rendered_unsq = rendered_image.unsqueeze(0);
+            auto gt_unsq = gt_image.unsqueeze(0);
+            auto ssim_v = loss_utils::fused_ssim(rendered_unsq, gt_unsq);
+            auto loss = (1.0f - pc->lambda_dssim_) * Ll1
+                        + pc->lambda_dssim_ * (1.0f - ssim_v);
+            loss.backward();
+            auto visible = std::get<3>(render_pkg);
+            pc->sparse_optimizer_->set_visibility_and_N(visible, pc->getXYZ().size(0));
+            pc->sparse_optimizer_->step();
+            pc->sparse_optimizer_->zero_grad(true);
+            if (pc->apply_exposure_)
+            {
+                pc->exposure_optimizer_->step();
+                pc->exposure_optimizer_->zero_grad(true);
+            }
+        }
+        torch::cuda::synchronize();
+        std::cout << "\033[1;35m     [Late-frame refine pass " << pass + 1
+                  << "/" << passes << "]\033[0m" << std::endl;
+    }
+}
+
 double optimize(const std::shared_ptr<Dataset>& dataset, std::shared_ptr<GaussianModel>& pc)
 {
     pc->t_start_ = std::chrono::steady_clock::now();
     int updated_num = 0;
     std::vector<int> opt_list;
-    int max_iters = 100;
+    int max_iters = 200;
 
     int train_camera_num = dataset->train_cameras_.size();
     std::vector<int> all_list(train_camera_num);

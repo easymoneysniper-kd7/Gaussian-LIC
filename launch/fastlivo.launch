@@ -1,13 +1,129 @@
 <?xml version="1.0"?>
-<launch>
-  <arg name="config_path"       default = "config/fastlivo.yaml" />
-  <arg name="dataset_name"      default = "fastlivo" />
+<!--
+  Gaussian-LIC backend + FAST-LIVO2 bridge launch file.
 
+  This launches ONLY the bridge node and the gs_mapping backend.
+  FAST-LIVO2 must be started SEPARATELY from its own catkin workspace:
+    source /root/catkin_fastlivo2/devel/setup.bash
+    roslaunch fast_livo mapping_hku.launch
+
+  Then (from catkin_gaussian workspace):
+    source /root/catkin_gaussian/devel/setup.bash
+    roslaunch gaussian_lic fastlivo.launch
+
+  Or use the provided helper script:
+    bash $(find gaussian_lic)/scripts/run_fastlivo2_e2e.sh
+
+  Pipeline:
+    rosbag play  →  FAST-LIVO2  →  fastlivo2_bridge  →  gs_mapping
+
+  Extrinsic parameters for HKU campus seq 00 (from hku_campus_seq_00.yaml):
+    extrin_R / extrin_T : LiDAR-to-IMU  (identity R, [0.04165, 0.02326, -0.0284])
+    R_cl / P_cl         : Camera←LiDAR  (Rcl, Pcl)
+-->
+<launch>
+  <!-- ── Dataset / result settings ──────────────────────────────────────── -->
+  <arg name="config_path"   default="config/fastlivo.yaml" />
+  <arg name="dataset_name"  default="hku_campus_seq_00_fastlivo2" />
+
+  <!-- ── FAST-LIVO2 → Gaussian-LIC bridge ──────────────────────────────── -->
+  <!--
+    Extrinsics below match hku_campus_seq_00.yaml.
+    Individual scalar params are used to avoid the ROS array-param parsing bug
+    (arrays via <rosparam> are silently parsed as strings when using subst_value).
+  -->
+  <node pkg="gaussian_lic" type="fastlivo2_bridge.py" name="fastlivo2_bridge" output="screen">
+    <!-- LiDAR-to-IMU extrinsic (extrin_R = R_il, row-major) -->
+    <param name="extrin_R_0"  type="double" value="1.0" />
+    <param name="extrin_R_1"  type="double" value="0.0" />
+    <param name="extrin_R_2"  type="double" value="0.0" />
+    <param name="extrin_R_3"  type="double" value="0.0" />
+    <param name="extrin_R_4"  type="double" value="1.0" />
+    <param name="extrin_R_5"  type="double" value="0.0" />
+    <param name="extrin_R_6"  type="double" value="0.0" />
+    <param name="extrin_R_7"  type="double" value="0.0" />
+    <param name="extrin_R_8"  type="double" value="1.0" />
+
+    <!-- extrin_T = P_il (LiDAR origin in IMU frame) [m] -->
+    <param name="extrin_T_0"  type="double" value="0.04165"  />
+    <param name="extrin_T_1"  type="double" value="0.02326"  />
+    <param name="extrin_T_2"  type="double" value="-0.0284"  />
+
+    <!-- R_cl: rotation FROM LiDAR TO Camera (row-major) -->
+    <param name="R_cl_0"  type="double" value="0.00610193"  />
+    <param name="R_cl_1"  type="double" value="-0.999863"   />
+    <param name="R_cl_2"  type="double" value="-0.0154172"  />
+    <param name="R_cl_3"  type="double" value="-0.00615449" />
+    <param name="R_cl_4"  type="double" value="0.0153796"   />
+    <param name="R_cl_5"  type="double" value="-0.999863"   />
+    <param name="R_cl_6"  type="double" value="0.999962"    />
+    <param name="R_cl_7"  type="double" value="0.00619598"  />
+    <param name="R_cl_8"  type="double" value="-0.0060598"  />
+
+    <!-- P_cl: LiDAR-in-Camera translation [m] -->
+    <param name="P_cl_0"  type="double" value="0.0194384"   />
+    <param name="P_cl_1"  type="double" value="0.104689"    />
+    <param name="P_cl_2"  type="double" value="-0.0251952"  />
+
+    <!-- Lens distortion coefficients (OpenCV k1,k2,p1,p2,k3 from camera_pinhole.yaml) -->
+    <!-- Distortion is applied in bridge so gs_mapping receives undistorted images -->
+    <param name="d0" type="double" value="-0.076160" />
+    <param name="d1" type="double" value="0.123001"  />
+    <param name="d2" type="double" value="-0.00113"  />
+    <param name="d3" type="double" value="0.0"       />
+    <param name="d4" type="double" value="0.0"       />
+
+    <!-- Topic names (defaults match FAST-LIVO2 HKU setup) -->
+    <param name="odom_topic"   type="string" value="/aft_mapped_to_init" />
+    <!-- Use FAST-LIVO2's undistorted image for better quality -->
+    <param name="image_topic"  type="string" value="/rgb_img"            />
+    <param name="points_topic" type="string" value="/cloud_registered"   />
+
+    <!-- Frame subsampling: publish every Nth LiDAR frame.
+         subsample_factor=2 gives ~1011 candidates from 2022 frames;
+         combined with sharpness_thresh this yields ~240 sharp frames
+         spread across the full 202s sequence with denser spatial coverage. -->
+    <param name="subsample_factor" type="int"    value="2"     />
+    <!-- Skip frames with Laplacian variance below this threshold (blurry).
+         60.0 was too low (included blurry GT). 100.0 is too high (filters the
+         entire second half of the bag - frames 100+ all have lap=68-99).
+         50.0 keeps enough coverage while rejecting the worst blur. -->
+    <param name="sharpness_thresh" type="double" value="100.0" />
+    <!-- Downsample point cloud to at most N points: 20000 pts → ~2.5x faster
+         cloud coloring. Full cloud has more LiDAR drift noise from accumulated
+         scans; 20000 random subsample implicitly filters noisy old points. -->
+    <param name="max_cloud_pts"   type="int"    value="20000"  />
+    <!-- Distance-based pre-filter: keep only the closest N points before
+         projection.  Prevents >10s processing for large accumulated clouds
+         on late frames (which trips the 10s gs_mapping exit timeout and
+         leaves late views completely uninitialized / blurry). -->
+    <param name="pre_filter_pts"  type="int"    value="60000" />
+    <!-- Brightness normalisation target (mean pixel value 0-255).
+         0.0 = disabled: preserve natural camera auto-exposure variation.
+         (90.0 was corrupting GT images by forcing all frames to same brightness,
+          causing pixel correlation collapse in second-half frames.) -->
+    <param name="target_brightness" type="double" value="90.0" />
+
+    <!-- Camera intrinsics for point-cloud coloring projection (HKU campus seq 00) -->
+    <!-- Correct FAST-LIVO2 intrinsics: camera_pinhole.yaml * scale=0.5 -->
+    <param name="fx"    type="double" value="646.78472" />
+    <param name="fy"    type="double" value="646.65775" />
+    <param name="cx"    type="double" value="313.456795" />
+    <param name="cy"    type="double" value="261.399612" />
+    <param name="img_w" type="int"    value="640"           />
+    <param name="img_h" type="int"    value="512"           />
+  </node>
+
+  <!-- ── Gaussian-LIC backend ───────────────────────────────────────────── -->
   <node pkg="gaussian_lic" type="gs_mapping" name="$(anon gs_mapping)" output="screen">
-    <param name="config_path"     type="string" value="$(find gaussian_lic)/$(arg config_path)" />
-    <param name="result_path"     type="string" value="$(find gaussian_lic)/result" />
-    <param name="dataset_name"    type="string" value="$(arg dataset_name)" />
-    <param name="lpips_path"     type="string" value="$(find gaussian_lic)/src/lpips" />
+    <param name="config_path"   type="string"
+           value="$(find gaussian_lic)/$(arg config_path)" />
+    <param name="result_path"   type="string"
+           value="$(find gaussian_lic)/result" />
+    <param name="dataset_name"  type="string"
+           value="$(arg dataset_name)" />
+    <param name="lpips_path"    type="string"
+           value="$(find gaussian_lic)/src/lpips" />
   </node>
 
 </launch>

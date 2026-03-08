@@ -79,3 +79,9 @@ target_link_libraries(gs_mapping
                       ${Python3_LIBRARIES}
                       ${FFI_LIB}
                       ${CUDA_LIB_DIR}/libcudart.so)
+
+## Install Python scripts so rosrun / roslaunch can find them
+catkin_install_python(PROGRAMS
+  scripts/fastlivo2_bridge.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)

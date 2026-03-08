@@ -187,6 +187,8 @@ public:
 
 void extend(const std::shared_ptr<Dataset>& dataset, std::shared_ptr<GaussianModel>& pc);
 double optimize(const std::shared_ptr<Dataset>& dataset, std::shared_ptr<GaussianModel>& pc);
+void optimizeLateFrames(const std::shared_ptr<Dataset>& dataset,
+                        std::shared_ptr<GaussianModel>& pc, int passes);
 void evaluateVisualQuality(const std::shared_ptr<Dataset>& dataset, 
                            std::shared_ptr<GaussianModel>& pc,
                            const std::string& result_path,

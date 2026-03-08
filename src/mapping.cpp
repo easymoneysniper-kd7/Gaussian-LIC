@@ -245,7 +245,33 @@ void mapping(const YAML::Node& node, const std::string& result_path, const std::
                   << "w GS per Iter \033[0m" << std::endl;
     }
 
-    /// [6] evaluation
+    /// [6] final global refinement to compensate for late-frame starvation.
+    ///     Each optimize() call trains ALL keyframe cameras uniformly. With N
+    ///     keyframes, camera_0 was trained N times during the main loop while
+    ///     camera_(N-1) was trained only once.  Adding N-1 extra global passes
+    ///     brings the last camera up to roughly equal footing with the first.
+    int n_keyframes = static_cast<int>(dataset->train_cameras_.size());
+    int global_passes = 30;  // hard cap ≤30 passes (~10 min), one optimize() call per pass
+    std::cout << "\n     🔧 Running " << global_passes
+              << " global refinement passes (GS=" << gaussians->xyz_.size(0) / 10000.0 << "w)..." << std::endl;
+    for (int pass = 0; pass < global_passes; ++pass)
+    {
+        auto t_pass = std::chrono::steady_clock::now();
+        double gs_count = optimize(dataset, gaussians);
+        torch::cuda::synchronize();
+        double pass_sec = std::chrono::duration_cast<std::chrono::duration<double>>(
+            std::chrono::steady_clock::now() - t_pass).count();
+        std::cout << std::fixed << std::setprecision(1)
+                  << "     🔧  pass " << pass + 1 << "/" << global_passes
+                  << "  GS=" << gs_count / 10000.0 << "w"
+                  << "  time=" << pass_sec << "s" << std::endl;
+        if (pass_sec > 300.0) {
+            std::cerr << "     🚨 ABORT: pass took " << pass_sec
+                      << "s > 300s, GS explosion detected! Stopping early." << std::endl;
+            break;
+        }
+    }
+    std::cout << "     🔧 Global refinement done." << std::endl;
     std::cout << "\n     🎉 Runtime Statistics 🎉\n";
     std::cout << std::fixed << std::setprecision(2) << "\n        [Total Mapping Time] " << total_mapping_time << "s" << std::endl;
     std::cout << std::fixed << std::setprecision(2) << "         1) Forward " << gaussians->t_forward_ << "s" << std::endl;
@@ -294,9 +320,9 @@ int main(int argc, char** argv)
         while (!exit_flag) 
         {
             double now = ros::Time::now().toSec();
-            if (gaussians_initialized && (now - last_point_time > 1.0)) 
+            if (gaussians_initialized && (now - last_point_time > 10.0)) 
             {
-                exit_flag = true;  // exit if no data is received for more than 1 second
+                exit_flag = true;  // exit if no data is received for more than 10 seconds
             } 
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }

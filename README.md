@@ -94,6 +94,8 @@ We test on ubuntu 20.04 with an NVIDIA RTX 3090 / 4090.
 
 Quick start on the sequence hku2 in the FAST-LIVO dataset.
 
+Note: `fastlivo.launch` and `fastlivo.yaml` are legacy names from the original FAST-LIVO dataset example. In the current FAST-LIVO2 bridge workflow used in this repository, they simply act as the HKU campus configuration entrypoint. The real behavior comes from the configured topics, camera intrinsics, and LiDAR-camera extrinsics, not from the filename itself.
+
 - Download [FAST-LIVO Dataset](https://connecthkuhk-my.sharepoint.com/personal/zhengcr_connect_hku_hk/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fzhengcr%5Fconnect%5Fhku%5Fhk%2FDocuments%2FFAST%2DLIVO%2DDatasets&ga=1) or [R3LIVE Dataset](https://github.com/ziv-lin/r3live_dataset) or [MCD Dataset](https://mcdviral.github.io/).
 
 + Modify `bag_path` in the `config/ct_odometry_fastlivo.yaml` file of Coco-LIC.

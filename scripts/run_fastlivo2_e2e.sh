@@ -6,10 +6,11 @@
 # the gaussian_lic_dev Docker container.
 #
 # Usage (from the host machine, inside the Gaussian-LIC project root):
-#   bash scripts/run_fastlivo2_e2e.sh [dataset_name] [bag_rate]
+#   bash scripts/run_fastlivo2_e2e.sh [dataset_name] [bag_rate] [bag_path] [frontend_launch] [backend_launch]
 #
 # Example:
 #   bash scripts/run_fastlivo2_e2e.sh hku_campus_seq_00_fastlivo2_direct 1.0
+#   bash scripts/run_fastlivo2_e2e.sh CBD_Building_01_fastlivo2 1.0 /root/catkin_gaussian/src/Gaussian-LIC/datasets/CBD_Building_01.bag mapping_cbd_raw.launch fastlivo_cbd.launch
 #
 # The script:
 #   1. Starts roscore
@@ -23,9 +24,13 @@
 set -e
 
 CONTAINER="gaussian_lic_dev"
-BAG_PATH="/root/catkin_gaussian/src/Gaussian-LIC/datasets/hku_campus_seq_00.bag"
+DEFAULT_BAG_PATH="/root/catkin_gaussian/src/Gaussian-LIC/datasets/hku_campus_seq_00.bag"
 DATASET_NAME="${1:-hku_campus_seq_00_fastlivo2_direct}"
 BAG_RATE="${2:-1.0}"
+BAG_PATH="${3:-${BAG_PATH:-$DEFAULT_BAG_PATH}}"
+FRONTEND_LAUNCH="${4:-${FRONTEND_LAUNCH:-mapping_hku.launch}}"
+BACKEND_LAUNCH="${5:-${BACKEND_LAUNCH:-fastlivo.launch}}"
+ROSBAG_IMAGE_REMAP="${ROSBAG_IMAGE_REMAP:-/camera/image_color/compressed:=/camera/image_color/compressed}"
 
 LOG_DIR="/tmp/gaussian_lic_logs"
 
@@ -80,7 +85,7 @@ echo "[runner] Starting FAST-LIVO2 ..."
 dexecd "
 source /opt/ros/noetic/setup.bash
 source /root/catkin_fastlivo2/devel/setup.bash
-roslaunch fast_livo mapping_hku.launch rviz:=false > $LOG_DIR/fastlivo2.log 2>&1
+roslaunch fast_livo $FRONTEND_LAUNCH rviz:=false > $LOG_DIR/fastlivo2.log 2>&1
 "
 echo "[runner] Waiting for FAST-LIVO2 to initialise (10 s) ..."
 sleep 10
@@ -90,7 +95,7 @@ echo "[runner] Starting bridge + gs_mapping ..."
 dexecd "
 source /opt/ros/noetic/setup.bash
 source /root/catkin_gaussian/devel/setup.bash
-roslaunch gaussian_lic fastlivo.launch dataset_name:=$DATASET_NAME > $LOG_DIR/gaussian_lic.log 2>&1
+roslaunch gaussian_lic $BACKEND_LAUNCH dataset_name:=$DATASET_NAME > $LOG_DIR/gaussian_lic.log 2>&1
 "
 echo "[runner] Waiting for backend to initialise (10 s) ..."
 sleep 10
@@ -100,7 +105,7 @@ echo "[runner] Playing bag at rate $BAG_RATE ..."
 dexecd "
 source /opt/ros/noetic/setup.bash
 rosbag play $BAG_PATH -r $BAG_RATE \
-  /camera/image_color/compressed:=/camera/image_color/compressed \
+  $ROSBAG_IMAGE_REMAP \
   > $LOG_DIR/rosbag.log 2>&1
 "
 

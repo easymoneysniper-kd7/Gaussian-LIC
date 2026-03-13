@@ -1,13 +1,67 @@
 <?xml version="1.0"?>
 <launch>
-  <arg name="config_path"       default = "config/r3live.yaml" />
-  <arg name="dataset_name"      default = "r3live" />
+  <!-- HKU (historically referenced as r3live in this repo's Gaussian config path) -->
+  <arg name="config_path"   default="config/r3live.yaml" />
+  <arg name="dataset_name"  default="hku_campus_seq_00_r3live" />
+
+  <node pkg="gaussian_lic" type="fastlivo2_bridge.py" name="fastlivo2_bridge" output="screen">
+    <param name="extrin_R_0"  type="double" value="1.0" />
+    <param name="extrin_R_1"  type="double" value="0.0" />
+    <param name="extrin_R_2"  type="double" value="0.0" />
+    <param name="extrin_R_3"  type="double" value="0.0" />
+    <param name="extrin_R_4"  type="double" value="1.0" />
+    <param name="extrin_R_5"  type="double" value="0.0" />
+    <param name="extrin_R_6"  type="double" value="0.0" />
+    <param name="extrin_R_7"  type="double" value="0.0" />
+    <param name="extrin_R_8"  type="double" value="1.0" />
+
+    <param name="extrin_T_0"  type="double" value="0.04165"  />
+    <param name="extrin_T_1"  type="double" value="0.02326"  />
+    <param name="extrin_T_2"  type="double" value="-0.0284"  />
+
+    <param name="R_cl_0"  type="double" value="0.00610193"  />
+    <param name="R_cl_1"  type="double" value="-0.999863"   />
+    <param name="R_cl_2"  type="double" value="-0.0154172"  />
+    <param name="R_cl_3"  type="double" value="-0.00615449" />
+    <param name="R_cl_4"  type="double" value="0.0153796"   />
+    <param name="R_cl_5"  type="double" value="-0.999863"   />
+    <param name="R_cl_6"  type="double" value="0.999962"    />
+    <param name="R_cl_7"  type="double" value="0.00619598"  />
+    <param name="R_cl_8"  type="double" value="-0.0060598"  />
+
+    <param name="P_cl_0"  type="double" value="0.0194384"   />
+    <param name="P_cl_1"  type="double" value="0.104689"    />
+    <param name="P_cl_2"  type="double" value="-0.0251952"  />
+
+    <param name="d0" type="double" value="-0.076160" />
+    <param name="d1" type="double" value="0.123001"  />
+    <param name="d2" type="double" value="-0.00113"  />
+    <param name="d3" type="double" value="0.0"       />
+    <param name="d4" type="double" value="0.0"       />
+
+    <param name="odom_topic"   type="string" value="/aft_mapped_to_init" />
+    <param name="image_topic"  type="string" value="/rgb_img"            />
+    <param name="points_topic" type="string" value="/cloud_registered"   />
+
+    <param name="subsample_factor" type="int"    value="2"     />
+    <param name="sharpness_thresh" type="double" value="100.0" />
+    <param name="max_cloud_pts"    type="int"    value="20000" />
+    <param name="pre_filter_pts"   type="int"    value="60000" />
+    <param name="target_brightness" type="double" value="90.0" />
+
+    <param name="fx"    type="double" value="646.78472" />
+    <param name="fy"    type="double" value="646.65775" />
+    <param name="cx"    type="double" value="313.456795" />
+    <param name="cy"    type="double" value="261.399612" />
+    <param name="img_w" type="int"    value="640" />
+    <param name="img_h" type="int"    value="512" />
+  </node>
 
   <node pkg="gaussian_lic" type="gs_mapping" name="$(anon gs_mapping)" output="screen">
-    <param name="config_path"     type="string" value="$(find gaussian_lic)/$(arg config_path)" />
-    <param name="result_path"     type="string" value="$(find gaussian_lic)/result" />
-    <param name="dataset_name"    type="string" value="$(arg dataset_name)" />
-    <param name="lpips_path"     type="string" value="$(find gaussian_lic)/src/lpips" />
+    <param name="config_path"  type="string" value="$(find gaussian_lic)/$(arg config_path)" />
+    <param name="result_path"  type="string" value="$(find gaussian_lic)/result" />
+    <param name="dataset_name" type="string" value="$(arg dataset_name)" />
+    <param name="lpips_path"   type="string" value="$(find gaussian_lic)/src/lpips" />
   </node>
 
 </launch>

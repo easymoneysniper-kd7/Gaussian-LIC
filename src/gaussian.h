@@ -53,7 +53,13 @@ public:
     Dataset(const Params& prm)
       : fx_(prm.fx), fy_(prm.fy), cx_(prm.cx), cy_(prm.cy),
         select_every_k_frame_(prm.select_every_k_frame),
-        all_frame_num_(0), is_keyframe_current_(false) {}
+                                eval_every_k_frame_(2),
+                all_frame_num_(0), is_keyframe_current_(false),
+                has_last_keyframe_pose_(false),
+                keyframe_trans_thresh_(0.19),
+                keyframe_rot_thresh_deg_(3.5),
+                min_keyframe_gap_(2),
+                last_keyframe_idx_(-1) {}
         
     void addFrame(Frame& cur_frame);
 
@@ -64,6 +70,15 @@ public:
     double cy_;
 
     int select_every_k_frame_;
+    int eval_every_k_frame_;
+
+    bool has_last_keyframe_pose_;
+    Eigen::Quaterniond last_keyframe_q_wc_;
+    Eigen::Vector3d last_keyframe_t_wc_;
+    double keyframe_trans_thresh_;
+    double keyframe_rot_thresh_deg_;
+    int min_keyframe_gap_;
+    int last_keyframe_idx_;
 
 
     int all_frame_num_;

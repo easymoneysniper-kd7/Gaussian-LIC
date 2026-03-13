@@ -8,7 +8,7 @@ cx: 313.456795
 cy: 261.399612
 
 
-select_every_k_frame: 3
+select_every_k_frame: 2
 
 sh_degree: 3
 white_background: false  # no adjustment needed
@@ -18,7 +18,7 @@ compute_cov3D_python: false  # no adjustment needed
 lambda_erank: 0  # no adjustment needed
 scaling_scale: 1  # 1 to avoid GS explosion during global refinement
 
-position_lr: 0.00016
+position_lr: 0.00008
 feature_lr: 0.0025
 opacity_lr: 0.05
 scaling_lr: 0.005

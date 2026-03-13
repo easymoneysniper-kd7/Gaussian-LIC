@@ -251,7 +251,7 @@ void mapping(const YAML::Node& node, const std::string& result_path, const std::
     ///     camera_(N-1) was trained only once.  Adding N-1 extra global passes
     ///     brings the last camera up to roughly equal footing with the first.
     int n_keyframes = static_cast<int>(dataset->train_cameras_.size());
-    int global_passes = 30;  // hard cap ≤30 passes (~10 min), one optimize() call per pass
+    int global_passes = 20;  // hard cap ≤20 passes
     std::cout << "\n     🔧 Running " << global_passes
               << " global refinement passes (GS=" << gaussians->xyz_.size(0) / 10000.0 << "w)..." << std::endl;
     for (int pass = 0; pass < global_passes; ++pass)

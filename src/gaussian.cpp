@@ -72,13 +72,24 @@ void Dataset::addFrame(Frame& cur_frame)
 
     /// train & test
     int width = image_rgb.cols, height = image_rgb.rows;
-    if ((all_frame_num_ + 1) % select_every_k_frame_ == 0)
+    bool periodic_keyframe = ((all_frame_num_ + 1) % select_every_k_frame_ == 0);
+    bool motion_keyframe = false;
+    if (has_last_keyframe_pose_)
+    {
+        double trans_delta = (t_wc - last_keyframe_t_wc_).norm();
+        double rot_delta_deg = q_wc.angularDistance(last_keyframe_q_wc_) * 180.0 / M_PI;
+        int frame_gap = all_frame_num_ - last_keyframe_idx_;
+        motion_keyframe = (frame_gap >= min_keyframe_gap_) &&
+                          (trans_delta >= keyframe_trans_thresh_ || rot_delta_deg >= keyframe_rot_thresh_deg_);
+    }
+    bool use_as_keyframe = periodic_keyframe || motion_keyframe;
+    if (use_as_keyframe)
     {
         is_keyframe_current_ = true;
         std::shared_ptr<Camera> cam = std::make_shared<Camera>();
 
         cam->original_image_ = tensor_utils::cvMat2TorchTensor_Float32(image_rgb, torch::kCPU, true);
-        
+
         std::stringstream ss;
         ss << std::setw(4) << std::setfill('0') << all_frame_num_;
         std::string formatted_str = ss.str();
@@ -88,10 +99,20 @@ void Dataset::addFrame(Frame& cur_frame)
         cam->setPose(q_wc.toRotationMatrix(), t_wc);
 
         train_cameras_.emplace_back(cam);
+        last_keyframe_q_wc_ = q_wc;
+        last_keyframe_t_wc_ = t_wc;
+        last_keyframe_idx_ = all_frame_num_;
+        has_last_keyframe_pose_ = true;
     }
     else
     {
         is_keyframe_current_ = false;
+    }
+
+    // Keep evaluation set deterministic so cross-run metrics stay comparable.
+    bool use_for_eval = (all_frame_num_ % eval_every_k_frame_ == 0);
+    if (use_for_eval)
+    {
         std::shared_ptr<Camera> cam = std::make_shared<Camera>();
 
         cam->original_image_ = tensor_utils::cvMat2TorchTensor_Float32(image_rgb, torch::kCPU);
@@ -903,6 +924,12 @@ void evaluateVisualQuality(const std::shared_ptr<Dataset>& dataset,
     std::ofstream metrics_file(result_path + "/metrics.txt", std::ios::out | std::ios::trunc);
     metrics_file << std::fixed;
     metrics_file << "num_final_gaussians=" << pc->getXYZ().size(0) << "\n";
+    metrics_file << "num_total_frames=" << dataset->all_frame_num_ << "\n";
+    metrics_file << "num_train_views=" << dataset->train_cameras_.size() << "\n";
+    metrics_file << "num_test_views=" << dataset->test_cameras_.size() << "\n";
+    metrics_file << "train_keyframe_stride=" << dataset->select_every_k_frame_ << "\n";
+    metrics_file << "test_eval_stride=" << dataset->eval_every_k_frame_ << "\n";
+    metrics_file << "split_policy=train:motion_or_periodic,test:fixed_stride_from_frame0" << "\n";
     metrics_file << std::setprecision(6);
     metrics_file << "train_psnr=" << train_psnr << "\n";
     metrics_file << "train_ssim=" << train_ssim << "\n";

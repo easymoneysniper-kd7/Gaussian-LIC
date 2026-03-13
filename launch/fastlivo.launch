@@ -24,7 +24,7 @@
 <launch>
   <!-- ── Dataset / result settings ──────────────────────────────────────── -->
   <arg name="config_path"   default="config/fastlivo.yaml" />
-  <arg name="dataset_name"  default="hku_campus_seq_00_fastlivo2" />
+  <arg name="dataset_name"  default="CBD_Building_01_fastlivo2" />
 
   <!-- ── FAST-LIVO2 → Gaussian-LIC bridge ──────────────────────────────── -->
   <!--
@@ -83,7 +83,7 @@
          subsample_factor=2 gives ~1011 candidates from 2022 frames;
          combined with sharpness_thresh this yields ~240 sharp frames
          spread across the full 202s sequence with denser spatial coverage. -->
-    <param name="subsample_factor" type="int"    value="2"     />
+    <param name="subsample_factor" type="int"    value="1"     />
     <!-- Skip frames with Laplacian variance below this threshold (blurry).
          60.0 was too low (included blurry GT). 100.0 is too high (filters the
          entire second half of the bag - frames 100+ all have lap=68-99).
